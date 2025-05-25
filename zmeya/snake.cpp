@@ -1,11 +1,10 @@
 #include "snake.h"
 
-Snake::Snake(int startX, int startY) : dir(RIGHT), shouldGrow(false) {
+Snake::Snake(int startX, int startY) : dir(RIGHT) {
     body.push_back({ startX, startY });
 }
 
 void Snake::move() {
-    // Добавляем новую голову
     auto newHead = body.front();
     switch (dir) {
     case UP:    newHead.second--; break;
@@ -14,23 +13,8 @@ void Snake::move() {
     case RIGHT: newHead.first++; break;
     }
     body.insert(body.begin(), newHead);
-
-    if (!shouldGrow) {
-        body.pop_back(); // Удаляем хвост если не растем
-    }
-    else {
-        shouldGrow = false; // Сбрасываем флаг после роста
-    }
+    body.pop_back();
 }
-
-void Snake::grow() {
-    shouldGrow = true;
-}
-
-bool Snake::isGrowing() const {
-    return shouldGrow;
-}
-
 
 void Snake::changeDirection(Direction newDir) {
     if ((dir == UP && newDir != DOWN) ||
@@ -45,6 +29,9 @@ bool Snake::checkFoodCollision(int foodX, int foodY) const {
     return body.front().first == foodX && body.front().second == foodY;
 }
 
+void Snake::grow() {
+    body.push_back(body.back());
+}
 
 const std::vector<std::pair<int, int>>& Snake::getBody() const {
     return body;
