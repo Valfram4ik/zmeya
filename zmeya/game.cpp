@@ -1,54 +1,67 @@
 #include "game.h"
-#include <conio.h>
-#include <iostream>
-#include <cstdlib>
-#include <ctime>
-#include <algorithm>
+#include <conio.h>    // Для _kbhit() и _getch()
+#include <iostream>   
+#include <stdlib.h>    // Для rand()
+#include <time.h>      // Для time()
+#include <algorithm>  // Для std::any_of
 
-Game::Game() : snake(START_X, START_Y), running(true), score(0), gameStarted(false) {
-    console = GetStdHandle(STD_OUTPUT_HANDLE);
+// Конструктор игры
+Game::Game() :
+    snake(START_X, START_Y), // Инициализация змейки в центре
+    running(true),           // Игра активна
+    score(0),               // Начальный счет
+    gameStarted(false)      // Игра еще не началась
+{
+    console = GetStdHandle(STD_OUTPUT_HANDLE); // Получаем хэндл консоли
+
+    // Настраиваем курсор (делаем невидимым)
     CONSOLE_CURSOR_INFO cursorInfo = { 1, FALSE };
     SetConsoleCursorInfo(console, &cursorInfo);
-    srand(static_cast<unsigned>(time(nullptr)));
 
-    generateFood();
-    prevCursorPos = { static_cast<SHORT>(START_X), static_cast<SHORT>(START_Y) };
+    srand(static_cast<unsigned>(time(nullptr))); // Инициализация генератора случайных чисел
 
-    system("cls");
-    drawBorders();
-    showStartScreen();
+    generateFood(); // Генерируем первую еду
 
+    prevCursorPos = { static_cast<SHORT>(START_X), static_cast<SHORT>(START_Y) }; // Начальная позиция
+
+    system("cls"); // Очищаем консоль
+    drawBorders(); // Рисуем границы
+    showStartScreen(); // Показываем стартовый экран
+
+    // Отрисовываем начальное положение змейки
     SetConsoleTextAttribute(console, FOREGROUND_GREEN | FOREGROUND_INTENSITY);
     SetConsoleCursorPosition(console, prevCursorPos);
     std::cout << 'O';
-
-    prevBody = snake.getBody();
 }
 
+// Главный игровой цикл
 void Game::run() {
-    while (running) {
-        DWORD frameStart = GetTickCount();
+    while (running) { // Пока игра активна
+        DWORD frameStart = GetTickCount(); // Засекаем время начала кадра
 
-        processInput();
-        if (gameStarted) {
-            update();
-            render();
+        processInput(); // Обрабатываем ввод
+        if (gameStarted) { // Если игра начата
+            update();   // Обновляем состояние
+            render();   // Отрисовываем объекты
         }
 
+        // Контроль FPS (задержка между кадрами)
         DWORD frameTime = GetTickCount() - frameStart;
         if (frameTime < GAME_SPEED) {
-            Sleep(GAME_SPEED - frameTime);
+            Sleep(GAME_SPEED - frameTime); // Задержка для стабильного FPS
         }
     }
-    gameOver();
+    gameOver(); // Вызываем экран завершения
 }
 
+// Обработка пользовательского ввода
 void Game::processInput() {
-    if (_kbhit()) {
-        int key = _getch();
+    if (_kbhit()) { // Если нажата клавиша
+        int key = _getch(); // Считываем код клавиши
 
+        // Обработка стрелок (двойной код)
         if (key == 0xE0) {
-            key = _getch();
+            key = _getch(); // Получаем реальный код стрелки
             switch (key) {
             case 72: key = KEY_UP; break;
             case 80: key = KEY_DOWN; break;
@@ -57,16 +70,18 @@ void Game::processInput() {
             }
         }
 
-        if (!gameStarted) {
+        if (!gameStarted) { // Если игра еще не начата
+            // Старт при нажатии любой клавиши управления
             if (key == KEY_W || key == KEY_A || key == KEY_S || key == KEY_D ||
                 key == KEY_UP || key == KEY_LEFT || key == KEY_RIGHT || key == KEY_DOWN) {
-                gameStarted = true;
-                system("cls");
-                drawBorders();
+                gameStarted = true; // Начинаем игру
+                system("cls"); // Очищаем консоль
+                drawBorders(); // Перерисовываем границы
             }
             return;
         }
 
+        // Обработка управления во время игры
         switch (key) {
         case KEY_W:
         case KEY_UP:
@@ -85,19 +100,19 @@ void Game::processInput() {
             if (snake.getDirection() != LEFT) snake.changeDirection(RIGHT);
             break;
         case KEY_ESC:
-            running = false;
+            running = false; // Выход из игры
             break;
         }
     }
 }
 
+// Обновление игрового состояния
 void Game::update() {
-    if (!gameStarted) return;
+    if (!gameStarted) return; // Если игра не начата, выходим
 
-    // Движение змейки
-    snake.move();
+    snake.move(); // Двигаем змейку
 
-    const auto& head = snake.getBody().front();
+    const auto& head = snake.getBody().front(); // Получаем голову
 
     // Проверка столкновения с едой (2x2 клетки)
     bool ateFood = false;
@@ -111,11 +126,10 @@ void Game::update() {
     }
 
     if (ateFood) {
-        // Увеличение змейки
-        snake.grow();
-        score += 10;
+        snake.grow(); // Увеличиваем змейку
+        score += 10; // Добавляем очки
 
-        // Очистка старой еды
+        // Очищаем старую еду
         for (int dy = 0; dy < FOOD_HEIGHT; dy++) {
             for (int dx = 0; dx < FOOD_WIDTH; dx++) {
                 COORD pos = {
@@ -127,8 +141,7 @@ void Game::update() {
             }
         }
 
-        // Генерация новой еды
-        generateFood();
+        generateFood(); // Генерируем новую еду
     }
 
     // Проверка столкновения с границами
@@ -136,14 +149,13 @@ void Game::update() {
         head.first >= WIDTH - BORDER_WIDTH - 1 ||
         head.second <= BORDER_WIDTH ||
         head.second >= HEIGHT - BORDER_WIDTH - 1) {
-        running = false;
+        running = false; // Завершаем игру
         return;
     }
 
-    // Проверка самопересечения (только если змейка длиннее 4 сегментов)
+    // Проверка самопересечения (только если длина > 4)
     if (snake.getBody().size() > 4) {
         const auto& head = snake.getBody().front();
-        // Начинаем проверку с 4-го сегмента для исключения ложных столкновений
         for (auto it = snake.getBody().begin() + 4; it != snake.getBody().end(); ++it) {
             if (head == *it) {
                 running = false;
@@ -153,6 +165,7 @@ void Game::update() {
     }
 }
 
+// Отрисовка игровых объектов
 void Game::render() {
     // Очистка предыдущих позиций змейки
     SetConsoleTextAttribute(console, FOREGROUND_GREEN | FOREGROUND_INTENSITY);
@@ -162,20 +175,20 @@ void Game::render() {
             static_cast<SHORT>(segment.second)
         };
         SetConsoleCursorPosition(console, pos);
-        std::cout << ' '; // Очищаем старую позицию
+        std::cout << ' ';
     }
 
-    // Сохраняем текущее состояние для следующей очистки
+    // Сохраняем текущее состояние змейки
     prevBody = snake.getBody();
 
-    // Отрисовка новых позиций змейки
+    // Отрисовка новой змейки
     for (const auto& segment : prevBody) {
         COORD pos = {
             static_cast<SHORT>(segment.first),
             static_cast<SHORT>(segment.second)
         };
         SetConsoleCursorPosition(console, pos);
-        std::cout << 'O';
+        std::cout << ' '; // Очищаем старую позицию
     }
 
     // Отрисовка еды (2x2)
@@ -191,6 +204,14 @@ void Game::render() {
         }
     }
 
+    // Обновление позиции головы для следующей очистки
+    if (!prevBody.empty()) {
+        prevCursorPos = {
+            static_cast<SHORT>(prevBody.front().first),
+            static_cast<SHORT>(prevBody.front().second)
+        };
+    }
+
     // Обновление счёта
     COORD scorePos = { 0, HEIGHT };
     SetConsoleCursorPosition(console, scorePos);
@@ -198,15 +219,18 @@ void Game::render() {
     std::cout << "Score: " << score << "    ";
 }
 
+// Генерация новой позиции еды
 void Game::generateFood() {
     const auto& body = snake.getBody();
     bool collision;
 
     do {
         collision = false;
+        // Генерация в пределах поля (с учетом границ)
         foodX = rand() % (WIDTH - FOOD_WIDTH - 2 * BORDER_WIDTH) + BORDER_WIDTH;
         foodY = rand() % (HEIGHT - FOOD_HEIGHT - 2 * BORDER_WIDTH) + BORDER_WIDTH;
 
+        // Проверка на пересечение с телом змейки
         for (const auto& segment : body) {
             for (int dy = 0; dy < FOOD_HEIGHT; dy++) {
                 for (int dx = 0; dx < FOOD_WIDTH; dx++) {
@@ -219,11 +243,13 @@ void Game::generateFood() {
             }
             if (collision) break;
         }
-    } while (collision);
+    } while (collision); // Повторяем, пока не найдем свободное место
 }
 
+// Рисование границ игрового поля
 void Game::drawBorders() {
     SetConsoleTextAttribute(console, FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+    // Верхняя и нижняя границы
     for (int x = 0; x < WIDTH; x++) {
         COORD pos = { static_cast<SHORT>(x), 0 };
         SetConsoleCursorPosition(console, pos);
@@ -233,6 +259,7 @@ void Game::drawBorders() {
         SetConsoleCursorPosition(console, pos);
         std::cout << '#';
     }
+    // Левая и правая границы
     for (int y = 1; y < HEIGHT - 1; y++) {
         COORD pos = { 0, static_cast<SHORT>(y) };
         SetConsoleCursorPosition(console, pos);
@@ -244,24 +271,30 @@ void Game::drawBorders() {
     }
 }
 
+// Экран завершения игры
 void Game::gameOver() {
-    system("cls");
+    system("cls"); // Очищаем консоль
+
+    // Выводим "GAME OVER"
     COORD pos = { WIDTH / 2 - 5, HEIGHT / 2 };
     SetConsoleCursorPosition(console, pos);
     SetConsoleTextAttribute(console, FOREGROUND_RED | FOREGROUND_INTENSITY);
     std::cout << "GAME OVER!";
 
+    // Выводим финальный счет
     pos.Y += 2;
     SetConsoleCursorPosition(console, pos);
     SetConsoleTextAttribute(console, FOREGROUND_BLUE | FOREGROUND_INTENSITY);
     std::cout << "Final Score: " << score;
 
+    // Инструкция для выхода
     pos.Y += 2;
     SetConsoleCursorPosition(console, pos);
     std::cout << "Press any key to exit...";
-    _getch();
+    _getch(); // Ожидаем нажатия любой клавиши
 }
 
+// Стартовый экран
 void Game::showStartScreen() {
     COORD pos = { WIDTH / 2 - 15, HEIGHT / 2 + 2 };
     SetConsoleCursorPosition(console, pos);
@@ -278,6 +311,7 @@ void Game::showStartScreen() {
     std::cout << "ESC - EXIT";
 }
 
+// Проверка валидности позиции (не используется в текущей версии)
 bool Game::isPositionValid(int x, int y) const {
     return x > BORDER_WIDTH - 1 && x < WIDTH - BORDER_WIDTH &&
         y > BORDER_WIDTH - 1 && y < HEIGHT - BORDER_WIDTH;
